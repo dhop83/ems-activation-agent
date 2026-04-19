@@ -4,11 +4,16 @@ import { runAgent } from './agent.js';
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Health check
 app.get('/', (req, res) => {
   res.json({ status: 'EMS Activation Agent (Gemini) online', timestamp: new Date().toISOString() });
+});
+
+// EMS webhook validation — EMS sends GET to verify endpoint is alive
+app.get('/webhook/ems', (req, res) => {
+  res.status(200).json({ status: 'ready' });
 });
 
 // EMS Webhook receiver
