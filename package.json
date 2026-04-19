@@ -1,0 +1,18 @@
+{
+  "name": "ems-activation-agent",
+  "version": "1.0.0",
+  "description": "Gemini-powered agent that monitors Sentinel EMS activation failures and sends email alerts",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "nodemailer": "^6.9.9"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
