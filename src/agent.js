@@ -1,15 +1,13 @@
-import nodemailer from 'nodemailer';
-
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ALERT_EMAIL = 'dale.hopkinson@thalesgroup.com';
 
 const SYSTEM_PROMPT = `You are an EMS Activation Monitoring Agent.
 
 You will receive a webhook payload from Sentinel EMS. Your job is to determine if it represents a failed activation.
 
-Failure states to detect: FAILED, ERROR, REJECTED, EXPIRED, REVOKED — or any non-ACTIVE/non-PENDING state on an activation event.
+Failure states to detect: FAILED, ERROR, REJECTED, EXPIRED, REVOKED, REVOKE_CONFIRMED, REVOKE_CONFIRMATION_PENDING — or any non-ACTIVE/non-PENDING state on an activation event.
 
 Respond ONLY with a valid JSON object — no markdown, no explanation, nothing else:
 
@@ -53,26 +51,22 @@ async function callGemini(payload) {
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   console.log('[gemini] Raw response:', text);
 
-  // Strip any accidental markdown fences
   const clean = text.replace(/```json|```/g, '').trim();
   return JSON.parse(clean);
 }
 
 async function sendEmail(result, rawPayload) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
-
-  const subject = `EMS Activation Failure Alert — Entitlement ${result.entitlement_uid}`;
-
-  const body = `
-EMS ACTIVATION FAILURE DETECTED
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: 'EMS Agent <onboarding@resend.dev>',
+      to: ALERT_EMAIL,
+      subject: `EMS Activation Failure Alert — Entitlement ${result.entitlement_uid}`,
+      text: `EMS ACTIVATION FAILURE DETECTED
 ================================
 
 Entitlement UID : ${result.entitlement_uid}
@@ -82,17 +76,18 @@ Timestamp       : ${result.timestamp}
 Summary         : ${result.summary}
 
 --- Raw Payload ---
-${JSON.stringify(rawPayload, null, 2)}
-  `.trim();
-
-  await transporter.sendMail({
-    from: process.env.SMTP_USER,
-    to: ALERT_EMAIL,
-    subject,
-    text: body
+${JSON.stringify(rawPayload, null, 2)}`
+    })
   });
 
-  console.log(`[email] Alert sent to ${ALERT_EMAIL}`);
+  const data = await response.json();
+  console.log('[email] Resend response:', JSON.stringify(data));
+
+  if (data.error) {
+    throw new Error(`Resend error: ${JSON.stringify(data.error)}`);
+  }
+
+  console.log(`[email] Alert sent to ${ALERT_EMAIL} — ID: ${data.id}`);
 }
 
 export async function runAgent(webhookPayload) {
@@ -105,6 +100,6 @@ export async function runAgent(webhookPayload) {
     console.log('[agent] Failure detected — sending email alert');
     await sendEmail(result, webhookPayload);
   } else {
-    console.log('[agent] No failure — no action required');
+    console.log('[agent] No action required');
   }
 }
