@@ -56,17 +56,15 @@ async function callGemini(payload) {
 }
 
 async function sendEmail(result, rawPayload) {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      from: 'EMS Agent <onboarding@resend.dev>',
-      to: ALERT_EMAIL,
-      subject: `EMS Activation Failure Alert — Entitlement ${result.entitlement_uid}`,
-      text: `EMS ACTIVATION FAILURE DETECTED
+  console.log('[email] Preparing to send via Resend...');
+  console.log('[email] RESEND_API_KEY present:', !!RESEND_API_KEY);
+  console.log('[email] Sending to:', ALERT_EMAIL);
+
+  const emailBody = {
+    from: 'EMS Agent <onboarding@resend.dev>',
+    to: ALERT_EMAIL,
+    subject: `EMS Activation Failure Alert — Entitlement ${result.entitlement_uid}`,
+    text: `EMS ACTIVATION FAILURE DETECTED
 ================================
 
 Entitlement UID : ${result.entitlement_uid}
@@ -77,8 +75,20 @@ Summary         : ${result.summary}
 
 --- Raw Payload ---
 ${JSON.stringify(rawPayload, null, 2)}`
-    })
+  };
+
+  console.log('[email] Calling Resend API...');
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(emailBody)
   });
+
+  console.log('[email] Resend HTTP status:', response.status);
 
   const data = await response.json();
   console.log('[email] Resend response:', JSON.stringify(data));
@@ -87,19 +97,29 @@ ${JSON.stringify(rawPayload, null, 2)}`
     throw new Error(`Resend error: ${JSON.stringify(data.error)}`);
   }
 
-  console.log(`[email] Alert sent to ${ALERT_EMAIL} — ID: ${data.id}`);
+  console.log(`[email] Alert sent successfully — ID: ${data.id}`);
 }
 
 export async function runAgent(webhookPayload) {
   console.log('[agent] Evaluating payload with Gemini...');
 
-  const result = await callGemini(webhookPayload);
-  console.log('[agent] Decision:', result);
+  try {
+    const result = await callGemini(webhookPayload);
+    console.log('[agent] Decision:', result);
 
-  if (result.is_failure) {
-    console.log('[agent] Failure detected — sending email alert');
-    await sendEmail(result, webhookPayload);
-  } else {
-    console.log('[agent] No action required');
+    if (result.is_failure) {
+      console.log('[agent] Failure detected — sending email alert');
+      try {
+        await sendEmail(result, webhookPayload);
+      } catch (emailErr) {
+        console.error('[email] Send failed:', emailErr.message);
+        console.error('[email] Stack:', emailErr.stack);
+      }
+    } else {
+      console.log('[agent] No action required');
+    }
+  } catch (agentErr) {
+    console.error('[agent] Error:', agentErr.message);
+    console.error('[agent] Stack:', agentErr.stack);
   }
 }
