@@ -1,7 +1,7 @@
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const ALERT_EMAIL = 'dale.hopkinson@thalesgroup.com';
+const ALERT_EMAIL = 'dale1383@gmail.com';
 
 const SYSTEM_PROMPT = `You are an EMS Activation Monitoring Agent.
 
